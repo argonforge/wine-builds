@@ -4,4 +4,4 @@
 > [!IMPORTANT]
 > `v3` runs on most x86-64 CPUs from 2013+. `v4` requires AVX-512.
 
-See [README](https://github.com/argonforge/wine-builds/blob/main/README.md) for install, hold, and rollback.
+See [README](https://github.com/argonforge/wine-builds/blob/main/README.md) for install and setup.
