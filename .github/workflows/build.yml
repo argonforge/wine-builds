@@ -1,85 +1,77 @@
-name: Build Wine (WoW64, Clang) optimized
+name: Build Wine
 
 on:
   workflow_dispatch:
     inputs:
-      wine_version:
-        description: 'Wine version (e.g. 11.0, 10.0)'
+      tag:
+        description: 'Release tag (e.g. v11.0)'
         required: true
-        default: '11.0'
+        default: 'v11.0'
+      draft:
+        description: 'Create draft release'
+        type: boolean
+        default: false
   push:
     tags:
       - "v*.*.*"
 
 env:
-  WINE_VERSION: ${{ inputs.wine_version || '11.0' }}
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  DRAFT: ${{ inputs.draft || 'false' }}
   CCACHE_MAXSIZE: 2G
-  # llvm-mingw release to use
+  CCACHE_COMPRESS: 'true'
   LLVM_MINGW_VERSION: '20260922'
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
+    strategy:
+      matrix:
+        include:
+          - ver: v3
+            flags: -march=x86-64-v3 -mtune=znver3 ${{ vars.FLAGS }}
+          - ver: v4
+            flags: -march=x86-64-v4 -mtune=znver4 ${{ vars.FLAGS }}
     runs-on: self-hosted
+    timeout-minutes: 90
     container:
       image: devuan/devuan:excalibur
       options: --user root
-    defaults:
-      run:
-        shell: bash
-
+    env:
+      OPT_FLAGS: ${{ matrix.flags }}
+      CCACHE_DIR: /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}/.ccache-${{ matrix.ver }}
     steps:
+      - name: Compute version variables
+        run: |
+          WINE_VERSION="${TAG#v}"
+          echo "WINE_VERSION=$WINE_VERSION" >> $GITHUB_ENV
+          echo "Using WINE_VERSION=$WINE_VERSION"
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install build dependencies
+      - name: Restore ccache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-wine-clang-mingw-${{ matrix.ver }}-${{ github.sha }}
+          restore-keys: |
+            ccache-wine-clang-mingw-${{ matrix.ver }}-
+
+      - name: Configure ccache
         run: |
-          export DEBIAN_FRONTEND=noninteractive
-          echo "deb     http://mirror.yandex.ru/mirrors/devuan/merged excalibur main" > /etc/apt/sources.list
-          echo "deb     http://mirror.yandex.ru/mirrors/devuan/merged excalibur-updates main" >> /etc/apt/sources.list
-          echo "deb     http://mirror.yandex.ru/mirrors/devuan/merged excalibur-security main" >> /etc/apt/sources.list
-          apt update
-
-          dpkg --add-architecture i386
-          apt update
-
-          apt install -y --no-install-recommends \
-            build-essential gcc-multilib g++-multilib \
-            clang lld llvm \
-            ccache flex bison pkg-config \
-            libc6-dev-i386 \
-            libx11-dev libx11-dev:i386 \
-            libxext-dev libxext-dev:i386 \
-            libxrender-dev libxrender-dev:i386 \
-            libxrandr-dev libxrandr-dev:i386 \
-            libxi-dev libxi-dev:i386 \
-            libxcursor-dev libxcursor-dev:i386 \
-            libxfixes-dev libxfixes-dev:i386 \
-            libxcomposite-dev libxcomposite-dev:i386 \
-            libfreetype-dev libfreetype-dev:i386 \
-            libfontconfig-dev libfontconfig-dev:i386 \
-            libgnutls28-dev libgnutls28-dev:i386 \
-            libasound2-dev libasound2-dev:i386 \
-            libpulse-dev libpulse-dev:i386 \
-            libdbus-1-dev libdbus-1-dev:i386 \
-            libunwind-dev libunwind-dev:i386 \
-            libgl-dev libgl-dev:i386 \
-            libvulkan-dev libvulkan-dev:i386 \
-            libsdl2-dev libsdl2-dev:i386 \
-            libudev-dev libudev-dev:i386 \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libosmesa6-dev libosmesa6-dev:i386 \
-            libcups2-dev libcups2-dev:i386 \
-            libkrb5-dev libkrb5-dev:i386 \
-            samba-dev ocl-icd-opencl-dev \
-            libpcap-dev libusb-1.0-0-dev libv4l-dev \
-            libxml2-dev libxslt1-dev \
-            libjpeg-dev libpng-dev libtiff-dev \
-            libmpg123-dev liblcms2-dev \
-            libfaudio-dev libfaudio-dev:i386 \
-            libvkd3d-dev libvkd3d-dev:i386 \
-            libwayland-dev wayland-protocols libxkbregistry-dev \
-            wget xz-utils git ca-certificates
+          mkdir -p "$CCACHE_DIR"
+          ccache --max-size="$CCACHE_MAXSIZE"
+          ccache --set-config=compression=true
+          ccache --set-config=compression_level=6
+          ccache -s
 
       - name: Install llvm-mingw
         run: |
@@ -100,23 +92,6 @@ jobs:
           /opt/llvm-mingw/bin/i686-w64-mingw32-clang --version | head -3
           echo "--- lld-link ---"
           /opt/llvm-mingw/bin/lld-link --version | head -3
-
-      - name: Restore ccache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-wine-clang-mingw-${{ env.WINE_VERSION }}-${{ github.sha }}
-          restore-keys: |
-            ccache-wine-clang-mingw-${{ env.WINE_VERSION }}-
-            ccache-wine-clang-mingw-
-
-      - name: Configure ccache
-        run: |
-          mkdir -p "$CCACHE_DIR"
-          ccache --max-size="$CCACHE_MAXSIZE"
-          ccache --set-config=compression=true
-          ccache --set-config=compression_level=6
-          ccache -s
 
       - name: Download Wine source
         run: |
@@ -139,15 +114,15 @@ jobs:
           # Unix part: system Clang with ccache
           CC: ccache clang
           CXX: ccache clang++
-          CFLAGS: -march=x86-64-v4 -mtune=znver4 -O3 -fomit-frame-pointer -falign-functions=32 -falign-loops=32
-          CXXFLAGS: -march=x86-64-v4 -mtune=znver4 -O3 -fomit-frame-pointer -falign-functions=32 -falign-loops=32
+          CFLAGS: ${{ env.OPT_FLAGS }}
+          CXXFLAGS: ${{ env.OPT_FLAGS }}
           LDFLAGS: -fuse-ld=lld -Wl,-O1,--sort-common,--as-needed
 
           # Cross part: llvm-mingw Clang with ccache
           CROSSCC: ccache x86_64-w64-mingw32-clang
           CROSSCXX: ccache x86_64-w64-mingw32-clang++
-          CROSSCFLAGS: -march=x86-64-v4 -mtune=znver4 -O3 -fomit-frame-pointer -falign-functions=32 -falign-loops=32
-          CROSSCXXFLAGS: -march=x86-64-v4 -mtune=znver4 -O3 -fomit-frame-pointer -falign-functions=32 -falign-loops=32
+          CROSSCFLAGS: ${{ env.OPT_FLAGS }}
+          CROSSCXXFLAGS: ${{ env.OPT_FLAGS }}
           CROSSLDFLAGS: -fuse-ld=lld
         run: |
           ./configure \
@@ -176,16 +151,62 @@ jobs:
                  "/opt/${BUILD_NAME}/share/applications" \
                  "/opt/${BUILD_NAME}/share/man"
           cd /opt
-          tar -cJf "${GITHUB_WORKSPACE}/${BUILD_NAME}.tar.xz" "${BUILD_NAME}"
-          ls -lh "${GITHUB_WORKSPACE}/${BUILD_NAME}.tar.xz"
+          tar -cJf "${GITHUB_WORKSPACE}/wine-${WINE_VERSION}-wow64-amd64-${{ matrix.ver }}.tar.xz" "${BUILD_NAME}"
+          ls -lh "${GITHUB_WORKSPACE}/wine-${WINE_VERSION}-wow64-amd64-${{ matrix.ver }}.tar.xz"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wine-wow64-${{ matrix.ver }}
+          path: ./*.tar.xz
+          retention-days: ${{ env.DRAFT == 'true' && 1 || 5 }}
 
       - name: Show ccache stats
         if: always()
         run: ccache -s
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: wine-wow64-${{ env.WINE_VERSION }}
-          path: ./*.tar.xz
-          retention-days: 5
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release and upload packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          WINE_VERSION="${TAG#v}"
+          FLAGS=(--latest)
+          [[ $DRAFT = true ]] && FLAGS=(--draft)
+
+          TITLE="Wine ${WINE_VERSION} (Clang)"
+          [[ $DRAFT = true ]] && TITLE="[DRAFT] $TITLE"
+
+          ls -lh artifacts/
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - uploading files"
+            gh release upload "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber \
+              artifacts/*.tar.xz
+          else
+            echo "Creating release $TAG"
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target ${{ github.sha }} \
+              --title "$TITLE" \
+              --notes-file .github/release-notes.md \
+              "${FLAGS[@]}" \
+              artifacts/*.tar.xz
+          fi
