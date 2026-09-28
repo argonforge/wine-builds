@@ -42,8 +42,7 @@ jobs:
     runs-on: self-hosted
     timeout-minutes: 90
     container:
-      image: devuan/devuan:excalibur
-      options: --user root
+      image: nafigat0r/devuan:6-dev
     env:
       OPT_FLAGS: ${{ matrix.flags }}
       CCACHE_DIR: /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}/.ccache-${{ matrix.ver }}
@@ -145,14 +144,15 @@ jobs:
 
       - name: Package Wine
         run: |
-          BUILD_NAME="wine-${WINE_VERSION}-wow64-amd64-clang"
+          BUILD_NAME="wine-${WINE_VERSION}-wow64-x86-64-${{ matrix.ver }}"
+          ARCHIVE_NAME="${BUILD_NAME}.tar.xz"
           mv "/opt/wine-${WINE_VERSION}" "/opt/${BUILD_NAME}"
           rm -rf "/opt/${BUILD_NAME}/include" \
                  "/opt/${BUILD_NAME}/share/applications" \
                  "/opt/${BUILD_NAME}/share/man"
           cd /opt
-          tar -cJf "${GITHUB_WORKSPACE}/wine-${WINE_VERSION}-wow64-amd64-${{ matrix.ver }}.tar.xz" "${BUILD_NAME}"
-          ls -lh "${GITHUB_WORKSPACE}/wine-${WINE_VERSION}-wow64-amd64-${{ matrix.ver }}.tar.xz"
+          tar -cJf "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}" "${BUILD_NAME}"
+          ls -lh "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
