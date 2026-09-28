@@ -1,12 +1,12 @@
-# Wine for Devuan Excalibur (Debian Trixie base)
+# Wine builds
 
-Optimized [Wine](https://www.winehq.org/) (WoW64) builds for Devuan Excalibur, built for modern CPUs.
+Optimized [Wine](https://www.winehq.org/) (WoW64) built for modern CPUs.
 
 ## Requirements
 
-- **Distribution:** Devuan Excalibur (stable)
 - **Architecture:** amd64
 - **CPU:** x86-64-v3 (AVX2) or x86-64-v4 (AVX-512) - pick the matching variant
+- **glibc:** 2.41+
 
 **Builds will not run** on CPUs without AVX2/AVX-512. Check support:
 
