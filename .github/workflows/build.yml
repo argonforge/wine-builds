@@ -188,7 +188,7 @@ jobs:
           FLAGS=(--latest)
           [[ $DRAFT = true ]] && FLAGS=(--draft)
 
-          TITLE="Wine ${WINE_VERSION} (Clang)"
+          TITLE="${WINE_VERSION} (Clang)"
           [[ $DRAFT = true ]] && TITLE="[DRAFT] $TITLE"
 
           ls -lh artifacts/
