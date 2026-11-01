@@ -51,7 +51,7 @@ Or download the `.tar.xz` file manually from the [Releases](../../releases) page
 ### 2. Add to PATH
 
 ```bash
-export PATH="$HOME/wine-opt/wine-11.0-wow64-x86-64-v4/bin:$PATH"
+export PATH="$HOME/wine-opt/wine-11.21-wow64-x86-64-v4/bin:$PATH"
 ```
 
 Add this line to `~/.bashrc` or `~/.profile` to make it persistent.
